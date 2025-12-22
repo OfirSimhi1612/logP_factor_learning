@@ -37,10 +37,6 @@ The model's performance is evaluated using Root Mean Squared Error (RMSE) and Me
 
 ## Usage
 
-To train the model and evaluate it on the test set:
-
-```bash
-python main.py
-```
+It is recommanded to follow the jupyter notebook at `notebooks/` to train the model and evaluate the performance in interactive way.
 
 Dependencies are listed in `environment.yml` (for Conda) and `requirements.txt` (for pip).
