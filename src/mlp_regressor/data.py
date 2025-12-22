@@ -14,7 +14,7 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors, Crippen
 
 from src.mp_graph.featurizer import Featurizer
-from src.mp_graph.simple_mp_graph import MessagePassingGraph
+from src.mp_graph.mp_graph import MessagePassingGraph
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from src.mlp_regressor.training import MoleculeDataset, collate_molecules
@@ -138,7 +138,7 @@ def create_and_save_splits(mol_indexs, mol_data):
     return train_mol_indexs, val_mol_indexs, test_mol_indexs
 
 
-def split_dataset(batch_size):
+def get_dataloaders(batch_size):
     df = get_dataset()
     X_atoms, atom_contribs, mol_indexs, mol_data = get_features_and_targets(df)
 

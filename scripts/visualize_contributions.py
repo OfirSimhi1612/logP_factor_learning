@@ -11,7 +11,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, Draw, Crippen
 from src.mlp_regressor.mlp import ContextualAtomScalarMLP
 from src.mp_graph.featurizer import Featurizer
-from src.mp_graph.simple_mp_graph import MessagePassingGraph
+from src.mp_graph.mp_graph import MessagePassingGraph
 
 # Configuration (must match training)
 RADIUS = 2

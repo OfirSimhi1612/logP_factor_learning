@@ -6,7 +6,7 @@ from sklearn.metrics import mean_squared_error
 
 from src.mlp_regressor.mlp import ContextualAtomScalarMLP
 from src.mlp_regressor.training import train_epoch, evaluate
-from src.mlp_regressor.data import split_dataset
+from src.mlp_regressor.data import get_dataloaders
 
 # --- CONFIGURATION ---
 HIDDEN_LAYERS = [40, 40, 32]
@@ -19,7 +19,7 @@ MW_CUTOFF = 500  # Threshold to define "large" molecules
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def main():    
-    train_loader, val_loader, test_loader = split_dataset(BATCH_SIZE)
+    train_loader, val_loader, test_loader = get_dataloaders(BATCH_SIZE)
     
     sample_batch = next(iter(train_loader))
     input_dim = sample_batch[0]['atom_features'].shape[1]
