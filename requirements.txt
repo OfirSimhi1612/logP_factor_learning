@@ -1,0 +1,7 @@
+numpy
+torch
+rdkit
+requests
+scikit-learn
+tqdm
+seaborn

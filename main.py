@@ -7,7 +7,7 @@ from sklearn.metrics import mean_squared_error
 
 from src.mlp_regressor.mlp import ContextualAtomScalarMLP
 from src.mlp_regressor.training import train_epoch, evaluate
-from src.mlp_regressor.data import get_dataloaders
+from src.utils.data import get_dataloaders
 
 # --- CONFIGURATION ---
 HIDDEN_LAYERS = [40, 40, 32]
