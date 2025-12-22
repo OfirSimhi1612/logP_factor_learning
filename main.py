@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from pathlib import Path
 from sklearn.metrics import mean_squared_error
 
 from src.mlp_regressor.mlp import ContextualAtomScalarMLP
@@ -15,6 +16,10 @@ BATCH_SIZE = 32
 EPOCHS = 30
 PATIENCE = 10
 MW_CUTOFF = 500  # Threshold to define "large" molecules
+
+# Get project root directory
+PROJECT_ROOT = Path(__file__).parent
+MODEL_PATH = PROJECT_ROOT / 'best_model_contextual.pt'
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -54,7 +59,7 @@ def main():
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             patience_counter = 0
-            torch.save(model.state_dict(), 'best_model_contextual.pt')
+            torch.save(model.state_dict(), MODEL_PATH)
         else:
             patience_counter += 1
             if patience_counter >= PATIENCE:
@@ -63,7 +68,7 @@ def main():
 
     # 7. Final Evaluation
     print("\nLoading best model and evaluating on test set...")
-    model.load_state_dict(torch.load('best_model_contextual.pt'))
+    model.load_state_dict(torch.load(MODEL_PATH))
     test_preds, test_targets, test_baselines, test_mws, test_mol_index_returned = evaluate(model, test_loader, device)
 
     print("\nData Alignment Sanity Check:")

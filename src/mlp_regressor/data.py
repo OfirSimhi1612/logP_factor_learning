@@ -9,6 +9,7 @@ import requests
 import pandas as pd
 import numpy as np
 import torch
+from pathlib import Path
 from tqdm import tqdm
 from rdkit import Chem
 from rdkit.Chem import Descriptors, Crippen
@@ -19,23 +20,33 @@ from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from src.mlp_regressor.training import MoleculeDataset, collate_molecules
 
+# Get project root directory (parent of src/)
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+SPLITS_DIR = DATA_DIR / "splits"
+
 DATA_URL = "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/Lipophilicity.csv"
-CACHE_FILE = "data/processed_molecules_cache.pkl"
+CACHE_FILE = DATA_DIR / "processed_molecules_cache.pkl"
 
 
 def get_dataset():
-    if os.path.exists('data/lipophilicity.csv'):
-        df = pd.read_csv('data/lipophilicity.csv')
+    """Load the lipophilicity dataset, downloading if necessary."""
+    DATA_DIR.mkdir(exist_ok=True)
+    csv_path = DATA_DIR / 'lipophilicity.csv'
+
+    if csv_path.exists():
+        df = pd.read_csv(csv_path)
     else:
-        print("downloading dataset...")
+        print("Downloading dataset...")
         response = requests.get(DATA_URL)
         df = pd.read_csv(io.StringIO(response.text))
-        df.to_csv('data/lipophilicity.csv', index=False)
+        df.to_csv(csv_path, index=False)
+        print(f"Dataset saved to {csv_path}")
     return df
 
 
 def get_features_and_targets(df, use_cache=True):
-    if use_cache and os.path.exists(CACHE_FILE):
+    if use_cache and CACHE_FILE.exists():
         with open(CACHE_FILE, 'rb') as f:
             cache_data = pickle.load(f)
         return cache_data['X_atom_fps'], cache_data['atom_rdkit_score'], cache_data['mol_indexs'], cache_data['mol_data']
@@ -112,8 +123,9 @@ def get_features_and_targets(df, use_cache=True):
 
 
 def create_and_save_splits(mol_indexs, mol_data):
-    os.makedirs('data/splits', exist_ok=True)
-    
+    """Create and save train/validation/test splits."""
+    SPLITS_DIR.mkdir(exist_ok=True, parents=True)
+
     unique_mol_indexs = np.unique(mol_indexs)
     train_mol_indexs, test_mol_indexs = train_test_split(
         unique_mol_indexs, test_size=0.2, random_state=42
@@ -121,19 +133,19 @@ def create_and_save_splits(mol_indexs, mol_data):
     train_mol_indexs, val_mol_indexs = train_test_split(
         train_mol_indexs, test_size=0.1, random_state=42
     )
-    
+
     # Save splits to CSV
     def save_split_csv(indices, filename):
         split_data = []
         for idx in indices:
             mol_info = mol_data[idx]
             split_data.append(mol_info)
-        
+
         pd.DataFrame(split_data).to_csv(filename, index=False)
 
-    save_split_csv(train_mol_indexs, 'data/splits/train.csv')
-    save_split_csv(val_mol_indexs, 'data/splits/val.csv')
-    save_split_csv(test_mol_indexs, 'data/splits/test.csv')
+    save_split_csv(train_mol_indexs, SPLITS_DIR / 'train.csv')
+    save_split_csv(val_mol_indexs, SPLITS_DIR / 'val.csv')
+    save_split_csv(test_mol_indexs, SPLITS_DIR / 'test.csv')
 
     return train_mol_indexs, val_mol_indexs, test_mol_indexs
 
@@ -154,4 +166,3 @@ def get_dataloaders(batch_size):
     
     return train_loader, val_loader, test_loader
 
-    
