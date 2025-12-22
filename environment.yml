@@ -1,0 +1,14 @@
+name: logp_pred
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python
+  - numpy
+  - pytorch
+  - rdkit
+  - requests
+  - scikit-learn
+  - tqdm
+  - pip
+
