@@ -11,8 +11,68 @@ import numpy as np
 import matplotlib.pyplot as plt
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw, Crippen
-from PIL import Image
+from PIL import Image, ImageOps
 import io
+import textwrap
+
+
+# Helper to crop white margins from RDKit PNGs
+def _crop_white_margins(pil_img, threshold=245):
+    """Crop near-white margins from an RDKit-rendered image."""
+    if pil_img is None:
+        return pil_img
+    # Convert to grayscale and find bounding box of non-white pixels
+    g = pil_img.convert('L')
+    arr = np.array(g)
+    mask = arr < threshold
+    if not mask.any():
+        return pil_img
+    ys, xs = np.where(mask)
+    y0, y1 = ys.min(), ys.max()
+    x0, x1 = xs.min(), xs.max()
+    # Small padding
+    pad = 6
+    x0 = max(0, x0 - pad)
+    y0 = max(0, y0 - pad)
+    x1 = min(pil_img.size[0] - 1, x1 + pad)
+    y1 = min(pil_img.size[1] - 1, y1 + pad)
+    return pil_img.crop((x0, y0, x1 + 1, y1 + 1))
+
+
+# Helper to parse a detailed title into a short title and metrics
+def _parse_title_and_metrics(title: str):
+    """Extract a short title and (experimental, rdkit, model) floats from a common title format."""
+    s = str(title)
+    short = s
+    exp = None
+    rdkit = None
+    model = None
+
+    # Typical: "Molecule 1498 Experimental: 1.56, RDKit: 0.89, Model: 1.96"
+    if 'Experimental' in s:
+        short = s.split('Experimental')[0].strip().rstrip(',')
+
+    def _grab_after(key):
+        if key not in s:
+            return None
+        try:
+            part = s.split(key, 1)[1]
+            # stop at comma if present
+            part = part.split(',', 1)[0]
+            return float(part.strip().replace(':', '').strip())
+        except Exception:
+            return None
+
+    exp = _grab_after('Experimental')
+    rdkit = _grab_after('RDKit')
+    model = _grab_after('Model')
+
+    # Fallback: keep only first line-ish as short title
+    short = short.replace('\n', ' ').strip()
+    if len(short) == 0:
+        short = 'Molecule'
+
+    return short, exp, rdkit, model
 
 from src.mp_graph.featurizer import Featurizer
 from src.mp_graph.mp_graph import MessagePassingGraph
@@ -258,7 +318,7 @@ def visualize_molecule_3d(mol, atom_scalars, atom_contribs, title="3D Molecule V
 
 def visualize_molecule_with_weights(mol, atom_scalars, atom_contribs,
                                      title="Molecule with Per-Atom Weights",
-                                     save_path=None, show_3d=True):
+                                     save_path=None, show_3d=True, exp_val = None):
     """
     Visualize molecule with atoms colored by hydrophobicity adjustment.
 
@@ -320,12 +380,12 @@ def visualize_molecule_with_weights(mol, atom_scalars, atom_contribs,
     highlight_atoms = list(range(num_atoms))
     highlight_colors = {i: tuple(colors_rgb[i][:3]) for i in range(num_atoms)}
 
-    # Set atom radii proportional to contribution magnitude
-    atom_radii = {i: 0.3 + 0.2 * min(abs(atom_contribs[i]) / 0.5, 1.0)
+    # Set atom radii proportional to contribution magnitude (reduced size)
+    atom_radii = {i: 0.22 + 0.14 * min(abs(atom_contribs[i]) / 0.5, 1.0)
                   for i in range(num_atoms)}
 
     # Generate 2D molecular drawing
-    drawer = Draw.rdMolDraw2D.MolDraw2DCairo(800, 800)
+    drawer = Draw.rdMolDraw2D.MolDraw2DCairo(650, 650)
     opts = drawer.drawOptions()
     opts.addAtomIndices = True
     opts.continuousHighlight = False   # Prevent highlight bleeding
@@ -342,56 +402,104 @@ def visualize_molecule_with_weights(mol, atom_scalars, atom_contribs,
     )
     drawer.FinishDrawing()
 
-    # Create figure with molecule and analysis panel
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6),
-                                     gridspec_kw={'width_ratios': [3, 1]})
+    # Create figure with molecule and analysis panel (improved layout)
+    fig, (ax1, ax2) = plt.subplots(
+        1, 2,
+        figsize=(12.5, 5.8),
+        gridspec_kw={'width_ratios': [3.8, 1.7]}
+    )
+    fig.patch.set_facecolor('white')
+
+    # Parse title and metrics for display
+    fig.suptitle(title, fontsize=16, fontweight='bold', y=0.98)
 
     # Display molecular structure
     img = drawer.GetDrawingText()
     pil_img = Image.open(io.BytesIO(img))
+    pil_img = _crop_white_margins(pil_img)
+    # Add padding so the molecule appears smaller and has breathing room
+    pil_img = ImageOps.expand(pil_img, border=40, fill='white')
     ax1.imshow(pil_img)
+    ax1.set_anchor('W')
     ax1.axis('off')
-    ax1.set_title(title, fontsize=14, fontweight='bold')
 
-    # Create analysis panel
+    # Create analysis panel (formatted)
     ax2.axis('off')
 
-    # Sort atoms by absolute difference magnitude
-    abs_diff = np.abs(diffs)
-    sorted_by_diff = np.argsort(abs_diff)[::-1]
+    # Basic summary values
+    rdkit_logp = float(atom_contribs.sum())
+    pred_logp = float((atom_contribs * atom_scalars).sum())
 
-    info_text = "Per-Atom Analysis\n" + "="*30 + "\n\n"
-    info_text += f"RDKit LogP: {atom_contribs.sum():.3f}\n"
-    info_text += f"Predicted LogP: {(atom_contribs * atom_scalars).sum():.3f}\n\n"
+    # Layout coordinates in axes fraction
+    x0 = 0.05
+    y = 0.95
+    line_h = 0.045
 
-    info_text += "Most Adjusted Atoms:\n"
-    info_text += "(Sorted by shift magnitude)\n\n"
+    def header(text):
+        nonlocal y
+        ax2.text(x0, y, text, transform=ax2.transAxes,
+                 fontsize=11, fontweight='bold', va='top', color='0.10')
+        y -= line_h * 0.9
 
-    for idx in sorted_by_diff[:5]:
-        diff = diffs[idx]
-        direction = "More Hydrophobic" if diff > 0 else "More Hydrophilic"
-        label = "[RED]" if diff > 0 else "[BLUE]"
+    def line(text, color='black', fs=9, weight=None):
+        nonlocal y
+        ax2.text(x0, y, text, transform=ax2.transAxes,
+                 fontsize=fs, color=color, va='top', fontweight=weight)
+        y -= line_h
 
-        info_text += f"{label} [{idx:2d}] {mol.GetAtomWithIdx(int(idx)).GetSymbol():2s}: "
-        info_text += f"{diff:+.3f} ({direction})\n"
-        info_text += f"       {atom_contribs[idx]:+.3f} -> {atom_contribs[idx]*atom_scalars[idx]:+.3f}\n"
+    # Panel background (wraps Results + swatches)
+    from matplotlib.patches import FancyBboxPatch, Rectangle
+    panel_x = 0.032
+    panel_y = 0.66
+    panel_w = 0.80
+    panel_h = 0.30
+    panel = FancyBboxPatch(
+        (panel_x, panel_y), panel_w, panel_h,
+        boxstyle='round,pad=0.02',
+        transform=ax2.transAxes,
+        facecolor='whitesmoke', alpha=0.95,
+        edgecolor='0.6', linewidth=1.5
+    )
+    ax2.add_patch(panel)
+    panel.set_zorder(0)
+    ax2.set_zorder(1)
 
-    info_text += "\nLeast Adjusted Atoms:\n"
-    for idx in sorted_by_diff[-3:][::-1]:
-        info_text += f"  [{idx:2d}] {mol.GetAtomWithIdx(int(idx)).GetSymbol():2s}: "
-        info_text += f"Shift: {diffs[idx]:.3f}\n"
+    # ---- Results section (was Legend) moved up ----
+    header('Results')
 
-    info_text += "\nColor Legend:\n"
-    info_text += "  BLUE : More Hydrophilic (Pred < RDKit)\n"
-    info_text += "  WHITE: No Change\n"
-    info_text += "  RED  : More Hydrophobic (Pred > RDKit)\n"
-    info_text += "\nSize = RDKit contribution\n"
+    # Prediction details (moved from title)
+    if exp_val is not None:
+        line(f'Experimental: {exp_val:.3f}', fs=9, color='0.15', weight='bold')
 
-    ax2.text(0.05, 0.95, info_text, transform=ax2.transAxes,
-             fontsize=10, verticalalignment='top', family='monospace',
-             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
+    print(rdkit_logp, abs(exp_val-rdkit_logp))
+    line(f'RDKit: {rdkit_logp:.3f} (Error={abs(exp_val-rdkit_logp):.3f})', fs=9, color='0.15', weight='bold')
+    line(f'Model: {pred_logp:.3f} (Error={abs(exp_val-pred_logp):.3f})', fs=9, color='0.15', weight='bold')
+    y -= line_h * 0.15
 
-    plt.tight_layout()
+    # Colored swatches + labels
+    legend_y = y
+    sw = 0.04
+    sh = 0.028
+
+    ax2.add_patch(Rectangle((x0, legend_y - sh), sw, sh, transform=ax2.transAxes,
+                            facecolor='royalblue', edgecolor='black', linewidth=0.5))
+    ax2.text(x0 + sw + 0.02, legend_y, 'More hydrophilic (Pred < RDKit)', transform=ax2.transAxes,
+             fontsize=8.7, va='top')
+
+    legend_y -= line_h * 0.9
+    ax2.add_patch(Rectangle((x0, legend_y - sh), sw, sh, transform=ax2.transAxes,
+                            facecolor='white', edgecolor='black', linewidth=0.5))
+    ax2.text(x0 + sw + 0.02, legend_y, 'No change', transform=ax2.transAxes,
+             fontsize=8.7, va='top')
+
+    legend_y -= line_h * 0.9
+    ax2.add_patch(Rectangle((x0, legend_y - sh), sw, sh, transform=ax2.transAxes,
+                            facecolor='indianred', edgecolor='black', linewidth=0.5))
+    ax2.text(x0 + sw + 0.02, legend_y, 'More hydrophobic (Pred > RDKit)', transform=ax2.transAxes,
+             fontsize=8.7, va='top')
+
+
+    plt.tight_layout(rect=[0.0, 0.0, 1.0, 0.92])
 
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
