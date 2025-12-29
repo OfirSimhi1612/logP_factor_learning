@@ -32,7 +32,7 @@ CACHE_FILE = DATA_DIR / "processed_molecules_cache.pkl"
 def get_dataset():
     """Load the lipophilicity dataset, downloading if necessary."""
     DATA_DIR.mkdir(exist_ok=True)
-    csv_path = DATA_DIR / 'lipophilicity.csv'
+    csv_path = DATA_DIR / 'LogP.csv'
 
     if csv_path.exists():
         df = pd.read_csv(csv_path)
@@ -51,6 +51,12 @@ def get_features_and_targets(df, use_cache=True):
             cache_data = pickle.load(f)
         return cache_data['X_atom_fps'], cache_data['atom_rdkit_score'], cache_data['mol_indexs'], cache_data['mol_data']
 
+    # Check your column name! It might be 'smiles' or 'Original_SMILES'
+    df['smiles'] = df['smiles'].astype(str).str.split('|').str[0]
+
+    # 2. Verify the pipes are gone (should print Empty DataFrame)
+    print("Rows with pipes:", df[df['smiles'].str.contains('\|')])
+
     X_atom_fps = []
     y_atom_target = []
     atom_rdkit_score = []
@@ -62,7 +68,11 @@ def get_features_and_targets(df, use_cache=True):
     featurizer = Featurizer()
 
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing molecules"):
-        mol = Chem.MolFromSmiles(row['smiles'])
+        smiles_str = row['smiles']
+        if "|" in smiles_str:
+            smiles_str = smiles_str.split("|")[0]
+
+        mol = Chem.MolFromSmiles(smiles_str)
         if mol is None: continue
 
         atom_contribs = np.array([x[0] for x in Crippen._GetAtomContribs(mol)])
