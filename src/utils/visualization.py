@@ -405,7 +405,7 @@ def visualize_molecule_with_weights(mol, atom_scalars, atom_contribs,
     # Create figure with molecule and analysis panel (improved layout)
     fig, (ax1, ax2) = plt.subplots(
         1, 2,
-        figsize=(12.5, 5.8),
+        figsize=(10, 5),
         gridspec_kw={'width_ratios': [3.8, 1.7]}
     )
     fig.patch.set_facecolor('white')
@@ -449,6 +449,7 @@ def visualize_molecule_with_weights(mol, atom_scalars, atom_contribs,
 
     # Panel background (wraps Results + swatches)
     from matplotlib.patches import FancyBboxPatch, Rectangle
+
     panel_x = 0.032
     panel_y = 0.66
     panel_w = 0.80

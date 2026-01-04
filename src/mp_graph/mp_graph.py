@@ -13,7 +13,6 @@ class MessagePassingGraph(nn.Module):
         """
         super().__init__()
         self.depth = depth
-        # No learnable parameters (Linear layers removed)
         
     def forward(self, 
                 adj_matrix: torch.Tensor,

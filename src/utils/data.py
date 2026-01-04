@@ -26,7 +26,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 SPLITS_DIR = DATA_DIR / "splits"
 
 DATA_URL = "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/Lipophilicity.csv"
-CACHE_FILE = DATA_DIR / "processed_molecules_cache.pkl"
+CACHE_FILE = DATA_DIR / "cache" / "processed_molecules_cache.pkl"
 
 
 def get_dataset():
