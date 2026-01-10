@@ -177,7 +177,7 @@ class Featurizer:
 
         return np.array(features, dtype=np.float32)
 
-    def get_dense_bond_features(self, mol):
+    def get_bond_features(self, mol):
         """
         Get dense bond features tensor.
         
@@ -218,6 +218,6 @@ class Featurizer:
             adj: numpy array of shape (num_atoms, num_atoms)
         """
         atom_features = self.featurize_atoms(mol)
-        bond_features = self.get_dense_bond_features(mol)
+        bond_features = self.get_bond_features(mol)
         adj = self.get_adjacency_matrix(mol)
         return atom_features, bond_features, adj
