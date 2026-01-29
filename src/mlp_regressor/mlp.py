@@ -2,6 +2,68 @@ import torch
 import torch.nn as nn
 
 
+class AtomOnlyMLP(nn.Module):
+    """
+    Simple MLP that predicts per-atom scalars from atom features only.
+    No message passing, no molecular context - each atom is independent.
+    """
+    def __init__(self, input_dim, hidden_dims):
+        super(AtomOnlyMLP, self).__init__()
+
+        layers = []
+        prev_dim = input_dim
+        for hidden_dim in hidden_dims:
+            layers.append(nn.Linear(prev_dim, hidden_dim))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(0.2))
+            prev_dim = hidden_dim
+
+        layers.append(nn.Linear(prev_dim, 1))
+        self.mlp = nn.Sequential(*layers)
+
+    def forward(self, atom_features):
+        """
+        Args:
+            atom_features: (num_atoms, input_dim)
+        Returns:
+            scalars: (num_atoms,)
+        """
+        scalars = self.mlp(atom_features)
+        return scalars.squeeze(-1)
+
+
+class ContextOnlyMLP(nn.Module):
+    """
+    MLP that predicts logP directly from pooled molecular features.
+    No per-atom scalars - just global molecular context.
+    """
+    def __init__(self, input_dim, hidden_dims):
+        super(ContextOnlyMLP, self).__init__()
+
+        layers = []
+        prev_dim = input_dim
+        for hidden_dim in hidden_dims:
+            layers.append(nn.Linear(prev_dim, hidden_dim))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(0.2))
+            prev_dim = hidden_dim
+
+        layers.append(nn.Linear(prev_dim, 1))
+        self.mlp = nn.Sequential(*layers)
+
+    def forward(self, atom_features):
+        """
+        Args:
+            atom_features: (num_atoms, input_dim)
+        Returns:
+            logp: scalar prediction for the molecule
+        """
+        # Mean pool over atoms to get molecular representation
+        mol_features = torch.mean(atom_features, dim=0, keepdim=True)  # (1, input_dim)
+        logp = self.mlp(mol_features)  # (1, 1)
+        return logp.squeeze()
+
+
 class ContextualAtomScalarMLP(nn.Module):
     def __init__(self, input_dim, hidden_dims):
         super(ContextualAtomScalarMLP, self).__init__()
