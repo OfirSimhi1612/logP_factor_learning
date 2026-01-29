@@ -33,17 +33,17 @@ class MoleculeDataset(Dataset):
         atom_rdkit_score = torch.FloatTensor(self.atom_contribs[atom_mask])
 
         # Molecule-level target
-        exp_logp = self.mol_data[mol_index]['exp_logp']
-        rdkit_logp = self.mol_data[mol_index]['rdkit_logp']
-        mw = self.mol_data[mol_index]['mw']
+        exp_logp = self.mol_data[mol_index]["exp_logp"]
+        rdkit_logp = self.mol_data[mol_index]["rdkit_logp"]
+        mw = self.mol_data[mol_index]["mw"]
 
         return {
-            'atom_features': atom_features,
-            'atom_rdkit_score': atom_rdkit_score,
-            'exp_logp': torch.FloatTensor([exp_logp]),
-            'rdkit_logp': torch.FloatTensor([rdkit_logp]),
-            'mw': mw,
-            'mol_index': mol_index
+            "atom_features": atom_features,
+            "atom_rdkit_score": atom_rdkit_score,
+            "exp_logp": torch.FloatTensor([exp_logp]),
+            "rdkit_logp": torch.FloatTensor([rdkit_logp]),
+            "mw": mw,
+            "mol_index": mol_index,
         }
 
 
@@ -75,9 +75,9 @@ def train_epoch(model, dataloader, optimizer, criterion, device):
 
         for mol_data in batch:
             # Get molecule data
-            atom_features = mol_data['atom_features'].to(device)
-            atom_rdkit_score = mol_data['atom_rdkit_score'].to(device)
-            exp_logp = mol_data['exp_logp'].to(device)
+            atom_features = mol_data["atom_features"].to(device)
+            atom_rdkit_score = mol_data["atom_rdkit_score"].to(device)
+            exp_logp = mol_data["exp_logp"].to(device)
 
             # Forward pass: get context-aware scalar for each atom
             # The network sees ALL atoms at once and outputs a vector of scalars
@@ -131,12 +131,12 @@ def evaluate(model, dataloader, device):
         for batch in tqdm(dataloader, desc="Evaluating", leave=False):
             for mol_data in batch:
                 # Get molecule data
-                atom_features = mol_data['atom_features'].to(device)
-                atom_rdkit_score = mol_data['atom_rdkit_score'].to(device)
-                exp_logp = mol_data['exp_logp'].item()
-                rdkit_logp = mol_data['rdkit_logp'].item()
-                mw = mol_data['mw']
-                mol_index = mol_data['mol_index']
+                atom_features = mol_data["atom_features"].to(device)
+                atom_rdkit_score = mol_data["atom_rdkit_score"].to(device)
+                exp_logp = mol_data["exp_logp"].item()
+                rdkit_logp = mol_data["rdkit_logp"].item()
+                mw = mol_data["mw"]
+                mol_index = mol_data["mol_index"]
 
                 # Forward pass
                 atom_scalars = model(atom_features)
@@ -148,8 +148,13 @@ def evaluate(model, dataloader, device):
                 mol_weights.append(mw)
                 mol_indexs_eval.append(mol_index)
 
-    return (np.array(predictions), np.array(targets), np.array(baselines),
-            np.array(mol_weights), np.array(mol_indexs_eval))
+    return (
+        np.array(predictions),
+        np.array(targets),
+        np.array(baselines),
+        np.array(mol_weights),
+        np.array(mol_indexs_eval),
+    )
 
 
 def get_atom_scalars(model, mol_data, device):
@@ -166,6 +171,6 @@ def get_atom_scalars(model, mol_data, device):
     """
     model.eval()
     with torch.no_grad():
-        atom_features = mol_data['atom_features'].to(device)
+        atom_features = mol_data["atom_features"].to(device)
         atom_scalars = model(atom_features)
         return atom_scalars.cpu().numpy()

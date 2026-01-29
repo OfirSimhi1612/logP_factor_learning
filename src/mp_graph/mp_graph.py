@@ -5,6 +5,7 @@ from rdkit import Chem
 
 from src.mp_graph.featurizer import Featurizer
 
+
 class MessagePassingGraph(nn.Module):
     def __init__(self, depth: int = 3):
         """
@@ -13,17 +14,19 @@ class MessagePassingGraph(nn.Module):
         """
         super().__init__()
         self.depth = depth
-        
-    def forward(self, 
-                adj_matrix: torch.Tensor,
-                atom_features: torch.Tensor, 
-                bond_features: torch.Tensor, 
-                readout_pooling: str = 'sum', 
-                global_features: torch.Tensor = None,
-                return_atoms: bool = False) -> torch.Tensor:
+
+    def forward(
+        self,
+        adj_matrix: torch.Tensor,
+        atom_features: torch.Tensor,
+        bond_features: torch.Tensor,
+        readout_pooling: str = "sum",
+        global_features: torch.Tensor = None,
+        return_atoms: bool = False,
+    ) -> torch.Tensor:
         """
         Runs message passing and returns a representation.
-        
+
         Args:
             adj_matrix: (N, N) - Adjacency matrix.
             atom_features: (N, D_atom) - Input features.
@@ -31,7 +34,7 @@ class MessagePassingGraph(nn.Module):
             readout_pooling: 'sum', 'mean', or 'max'.
             global_features: Optional (G_dim,) tensor.
             return_atoms: If True, returns (N, d_max) tensor of atom embeddings.
-            
+
         Returns:
             torch.Tensor: Either (N, d_max) or (d_max + G_dim,).
         """
@@ -39,21 +42,21 @@ class MessagePassingGraph(nn.Module):
         d_atom = atom_features.shape[1]
         d_bond = bond_features.shape[2]
         d_max = max(d_atom, d_bond)
-        
+
         # Mask: (N, N, 1)
         mask = (adj_matrix > 0).float().unsqueeze(-1)
-        
+
         # 0. Zero-Pad Inputs to Match Dimensions
         if d_atom < d_max:
             current_atoms = F.pad(atom_features, (0, d_max - d_atom))
         else:
             current_atoms = atom_features
-            
+
         if d_bond < d_max:
             current_messages = F.pad(bond_features, (0, d_max - d_bond))
         else:
             current_messages = bond_features
-        
+
         # Keep initial aligned bonds for residual
         initial_bonds = current_messages.clone()
 
@@ -75,11 +78,11 @@ class MessagePassingGraph(nn.Module):
             return current_atoms
 
         # --- Readout (Pool atoms only) ---
-        if readout_pooling == 'sum':
+        if readout_pooling == "sum":
             graph_feature = torch.sum(current_atoms, dim=0)
-        elif readout_pooling == 'mean':
+        elif readout_pooling == "mean":
             graph_feature = torch.mean(current_atoms, dim=0)
-        elif readout_pooling == 'max':
+        elif readout_pooling == "max":
             graph_feature, _ = torch.max(current_atoms, dim=0)
         else:
             raise ValueError(f"Unsupported readout_pooling: {readout_pooling}")
@@ -90,25 +93,34 @@ class MessagePassingGraph(nn.Module):
 
         return graph_feature
 
+
 # --- Usage Example ---
 if __name__ == "__main__":
     smiles = "Cn1c(CN2CCN(CC2)c3ccc(Cl)cc3)nc4ccccc14"
     feturizer = Featurizer()
-    atom_features, bond_features, adj = feturizer.featurize_molecule(Chem.MolFromSmiles(smiles))
-    
+    atom_features, bond_features, adj = feturizer.featurize_molecule(
+        Chem.MolFromSmiles(smiles)
+    )
+
     # Convert numpy to torch
     atom_features = torch.from_numpy(atom_features)
     bond_features = torch.from_numpy(bond_features)
     adj = torch.from_numpy(adj)
-    
-    # Initialize model (No dimension args needed!)
+
+    # Initialize model (No dimension args needed)
     cmpnn = MessagePassingGraph(depth=3)
-    
+
     # Run forward pass
     # It will auto-pad smaller features to match larger ones
-    vec1 = cmpnn(adj, atom_features, bond_features, readout_pooling='mean')
-    print("Vector 1 Shape:", vec1) 
+    vec1 = cmpnn(adj, atom_features, bond_features, readout_pooling="mean")
+    print("Vector 1 Shape:", vec1)
 
     global_f = torch.randn(10)
-    vec2 = cmpnn(adj, atom_features, bond_features, readout_pooling='sum', global_features=global_f)
+    vec2 = cmpnn(
+        adj,
+        atom_features,
+        bond_features,
+        readout_pooling="sum",
+        global_features=global_f,
+    )
     print("Vector 2 Shape:", vec2.shape)

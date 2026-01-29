@@ -9,12 +9,12 @@ from .visualization import (
     get_atom_features_from_mol,
     predict_atom_scalars,
     visualize_molecule_with_weights,
-    visualize_molecule_3d
+    visualize_molecule_3d,
 )
 
 __all__ = [
-    'get_atom_features_from_mol',
-    'predict_atom_scalars',
-    'visualize_molecule_with_weights',
-    'visualize_molecule_3d'
+    "get_atom_features_from_mol",
+    "predict_atom_scalars",
+    "visualize_molecule_with_weights",
+    "visualize_molecule_3d",
 ]

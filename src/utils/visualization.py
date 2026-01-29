@@ -13,7 +13,8 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, Draw, Crippen
 from PIL import Image, ImageOps
 import io
-import textwrap
+from src.mp_graph.featurizer import Featurizer
+from src.mp_graph.mp_graph import MessagePassingGraph
 
 
 # Helper to crop white margins from RDKit PNGs
@@ -22,7 +23,7 @@ def _crop_white_margins(pil_img, threshold=245):
     if pil_img is None:
         return pil_img
     # Convert to grayscale and find bounding box of non-white pixels
-    g = pil_img.convert('L')
+    g = pil_img.convert("L")
     arr = np.array(g)
     mask = arr < threshold
     if not mask.any():
@@ -37,45 +38,6 @@ def _crop_white_margins(pil_img, threshold=245):
     x1 = min(pil_img.size[0] - 1, x1 + pad)
     y1 = min(pil_img.size[1] - 1, y1 + pad)
     return pil_img.crop((x0, y0, x1 + 1, y1 + 1))
-
-
-# Helper to parse a detailed title into a short title and metrics
-def _parse_title_and_metrics(title: str):
-    """Extract a short title and (experimental, rdkit, model) floats from a common title format."""
-    s = str(title)
-    short = s
-    exp = None
-    rdkit = None
-    model = None
-
-    # Typical: "Molecule 1498 Experimental: 1.56, RDKit: 0.89, Model: 1.96"
-    if 'Experimental' in s:
-        short = s.split('Experimental')[0].strip().rstrip(',')
-
-    def _grab_after(key):
-        if key not in s:
-            return None
-        try:
-            part = s.split(key, 1)[1]
-            # stop at comma if present
-            part = part.split(',', 1)[0]
-            return float(part.strip().replace(':', '').strip())
-        except Exception:
-            return None
-
-    exp = _grab_after('Experimental')
-    rdkit = _grab_after('RDKit')
-    model = _grab_after('Model')
-
-    # Fallback: keep only first line-ish as short title
-    short = short.replace('\n', ' ').strip()
-    if len(short) == 0:
-        short = 'Molecule'
-
-    return short, exp, rdkit, model
-
-from src.mp_graph.featurizer import Featurizer
-from src.mp_graph.mp_graph import MessagePassingGraph
 
 
 def get_atom_features_from_mol(mol):
@@ -168,8 +130,15 @@ def predict_atom_scalars(model, mol, device):
     return atom_scalars, atom_contribs
 
 
-def visualize_molecule_3d(mol, atom_scalars, atom_contribs, title="3D Molecule View",
-                          vmin=None, vmax=None, save_path=None):
+def visualize_molecule_3d(
+    mol,
+    atom_scalars,
+    atom_contribs,
+    title="3D Molecule View",
+    vmin=None,
+    vmax=None,
+    save_path=None,
+):
     """
     Create 3D visualization of molecule with atoms colored by hydrophobicity shift.
 
@@ -249,7 +218,7 @@ def visualize_molecule_3d(mol, atom_scalars, atom_contribs, title="3D Molecule V
 
     # Create 3D plot
     fig = plt.figure(figsize=(12, 10))
-    ax = fig.add_subplot(111, projection='3d')
+    ax = fig.add_subplot(111, projection="3d")
 
     # Render bonds
     for bond in bonds:
@@ -257,7 +226,7 @@ def visualize_molecule_3d(mol, atom_scalars, atom_contribs, title="3D Molecule V
         xs = [positions[i][0], positions[j][0]]
         ys = [positions[i][1], positions[j][1]]
         zs = [positions[i][2], positions[j][2]]
-        ax.plot(xs, ys, zs, color='black', linestyle='-', linewidth=2, alpha=0.6)
+        ax.plot(xs, ys, zs, color="black", linestyle="-", linewidth=2, alpha=0.6)
 
     # Render atoms
     for i in range(num_atoms):
@@ -271,24 +240,45 @@ def visualize_molecule_3d(mol, atom_scalars, atom_contribs, title="3D Molecule V
         else:
             size = 300
 
-        ax.scatter(positions[i][0], positions[i][1], positions[i][2],
-                  c=[colors[i]], s=size, edgecolors='black', linewidth=2,
-                  alpha=0.9)
+        ax.scatter(
+            positions[i][0],
+            positions[i][1],
+            positions[i][2],
+            c=[colors[i]],
+            s=size,
+            edgecolors="black",
+            linewidth=2,
+            alpha=0.9,
+        )
 
         # Add atom labels
-        ax.text(positions[i][0], positions[i][1], positions[i][2],
-               f'{symbol}{i}', fontsize=8, ha='center', va='center')
+        ax.text(
+            positions[i][0],
+            positions[i][1],
+            positions[i][2],
+            f"{symbol}{i}",
+            fontsize=8,
+            ha="center",
+            va="center",
+        )
 
     # Configure axes
-    ax.set_xlabel('X', fontsize=12)
-    ax.set_ylabel('Y', fontsize=12)
-    ax.set_zlabel('Z', fontsize=12)
-    ax.set_title(title, fontsize=14, fontweight='bold')
+    ax.set_xlabel("X", fontsize=12)
+    ax.set_ylabel("Y", fontsize=12)
+    ax.set_zlabel("Z", fontsize=12)
+    ax.set_title(title, fontsize=14, fontweight="bold")
 
     # Set equal aspect ratio
-    max_range = np.array([positions[:, 0].max() - positions[:, 0].min(),
-                         positions[:, 1].max() - positions[:, 1].min(),
-                         positions[:, 2].max() - positions[:, 2].min()]).max() / 2.0
+    max_range = (
+        np.array(
+            [
+                positions[:, 0].max() - positions[:, 0].min(),
+                positions[:, 1].max() - positions[:, 1].min(),
+                positions[:, 2].max() - positions[:, 2].min(),
+            ]
+        ).max()
+        / 2.0
+    )
 
     mid_x = (positions[:, 0].max() + positions[:, 0].min()) * 0.5
     mid_y = (positions[:, 1].max() + positions[:, 1].min()) * 0.5
@@ -300,25 +290,36 @@ def visualize_molecule_3d(mol, atom_scalars, atom_contribs, title="3D Molecule V
 
     # Add colorbar
     import matplotlib.cm as cm
+
     norm = plt.Normalize(vmin=-max_diff, vmax=max_diff)
     sm = cm.ScalarMappable(cmap=cm.bwr, norm=norm)
     sm.set_array([])
     cbar = plt.colorbar(sm, ax=ax, pad=0.1, shrink=0.8)
-    cbar.set_label('Hydrophobicity Shift (Blue=Hydrophilic, Red=Hydrophobic)',
-                   rotation=270, labelpad=20, fontsize=12)
+    cbar.set_label(
+        "Hydrophobicity Shift (Blue=Hydrophilic, Red=Hydrophobic)",
+        rotation=270,
+        labelpad=20,
+        fontsize=12,
+    )
 
     plt.tight_layout()
 
     if save_path:
-        save_path_3d = save_path.replace('.png', '_3d.png')
-        plt.savefig(save_path_3d, dpi=150, bbox_inches='tight')
+        save_path_3d = save_path.replace(".png", "_3d.png")
+        plt.savefig(save_path_3d, dpi=150, bbox_inches="tight")
 
     return fig
 
 
-def visualize_molecule_with_weights(mol, atom_scalars, atom_contribs,
-                                     title="Molecule with Per-Atom Weights",
-                                     save_path=None, show_3d=True, exp_val = None):
+def visualize_molecule_with_weights(
+    mol,
+    atom_scalars,
+    atom_contribs,
+    title="Molecule with Per-Atom Weights",
+    save_path=None,
+    show_3d=True,
+    exp_val=None,
+):
     """
     Visualize molecule with atoms colored by hydrophobicity adjustment.
 
@@ -381,15 +382,16 @@ def visualize_molecule_with_weights(mol, atom_scalars, atom_contribs,
     highlight_colors = {i: tuple(colors_rgb[i][:3]) for i in range(num_atoms)}
 
     # Set atom radii proportional to contribution magnitude (reduced size)
-    atom_radii = {i: 0.22 + 0.14 * min(abs(atom_contribs[i]) / 0.5, 1.0)
-                  for i in range(num_atoms)}
+    atom_radii = {
+        i: 0.22 + 0.14 * min(abs(atom_contribs[i]) / 0.5, 1.0) for i in range(num_atoms)
+    }
 
     # Generate 2D molecular drawing
     drawer = Draw.rdMolDraw2D.MolDraw2DCairo(650, 650)
     opts = drawer.drawOptions()
     opts.addAtomIndices = True
-    opts.continuousHighlight = False   # Prevent highlight bleeding
-    opts.fillHighlights = True         # Fill atom circles
+    opts.continuousHighlight = False  # Prevent highlight bleeding
+    opts.fillHighlights = True  # Fill atom circles
     opts.bondLineWidth = 2
 
     drawer.DrawMolecule(
@@ -398,33 +400,31 @@ def visualize_molecule_with_weights(mol, atom_scalars, atom_contribs,
         highlightAtomColors=highlight_colors,
         highlightAtomRadii=atom_radii,
         highlightBonds=[],
-        highlightBondColors=None
+        highlightBondColors=None,
     )
     drawer.FinishDrawing()
 
     # Create figure with molecule and analysis panel (improved layout)
     fig, (ax1, ax2) = plt.subplots(
-        1, 2,
-        figsize=(10, 5),
-        gridspec_kw={'width_ratios': [3.8, 1.7]}
+        1, 2, figsize=(10, 5), gridspec_kw={"width_ratios": [3.8, 1.7]}
     )
-    fig.patch.set_facecolor('white')
+    fig.patch.set_facecolor("white")
 
     # Parse title and metrics for display
-    fig.suptitle(title, fontsize=16, fontweight='bold', y=0.98)
+    fig.suptitle(title, fontsize=16, fontweight="bold", y=0.98)
 
     # Display molecular structure
     img = drawer.GetDrawingText()
     pil_img = Image.open(io.BytesIO(img))
     pil_img = _crop_white_margins(pil_img)
     # Add padding so the molecule appears smaller and has breathing room
-    pil_img = ImageOps.expand(pil_img, border=40, fill='white')
+    pil_img = ImageOps.expand(pil_img, border=40, fill="white")
     ax1.imshow(pil_img)
-    ax1.set_anchor('W')
-    ax1.axis('off')
+    ax1.set_anchor("W")
+    ax1.axis("off")
 
     # Create analysis panel (formatted)
-    ax2.axis('off')
+    ax2.axis("off")
 
     # Basic summary values
     rdkit_logp = float(atom_contribs.sum())
@@ -437,14 +437,30 @@ def visualize_molecule_with_weights(mol, atom_scalars, atom_contribs,
 
     def header(text):
         nonlocal y
-        ax2.text(x0, y, text, transform=ax2.transAxes,
-                 fontsize=11, fontweight='bold', va='top', color='0.10')
+        ax2.text(
+            x0,
+            y,
+            text,
+            transform=ax2.transAxes,
+            fontsize=11,
+            fontweight="bold",
+            va="top",
+            color="0.10",
+        )
         y -= line_h * 0.9
 
-    def line(text, color='black', fs=9, weight=None):
+    def line(text, color="black", fs=9, weight=None):
         nonlocal y
-        ax2.text(x0, y, text, transform=ax2.transAxes,
-                 fontsize=fs, color=color, va='top', fontweight=weight)
+        ax2.text(
+            x0,
+            y,
+            text,
+            transform=ax2.transAxes,
+            fontsize=fs,
+            color=color,
+            va="top",
+            fontweight=weight,
+        )
         y -= line_h
 
     # Panel background (wraps Results + swatches)
@@ -455,26 +471,40 @@ def visualize_molecule_with_weights(mol, atom_scalars, atom_contribs,
     panel_w = 0.80
     panel_h = 0.30
     panel = FancyBboxPatch(
-        (panel_x, panel_y), panel_w, panel_h,
-        boxstyle='round,pad=0.02',
+        (panel_x, panel_y),
+        panel_w,
+        panel_h,
+        boxstyle="round,pad=0.02",
         transform=ax2.transAxes,
-        facecolor='whitesmoke', alpha=0.95,
-        edgecolor='0.6', linewidth=1.5
+        facecolor="whitesmoke",
+        alpha=0.95,
+        edgecolor="0.6",
+        linewidth=1.5,
     )
     ax2.add_patch(panel)
     panel.set_zorder(0)
     ax2.set_zorder(1)
 
     # ---- Results section (was Legend) moved up ----
-    header('Results')
+    header("Results")
 
     # Prediction details (moved from title)
     if exp_val is not None:
-        line(f'Experimental: {exp_val:.3f}', fs=9, color='0.15', weight='bold')
+        line(f"Experimental: {exp_val:.3f}", fs=9, color="0.15", weight="bold")
 
-    print(rdkit_logp, abs(exp_val-rdkit_logp))
-    line(f'RDKit: {rdkit_logp:.3f} (Error={abs(exp_val-rdkit_logp):.3f})', fs=9, color='0.15', weight='bold')
-    line(f'Model: {pred_logp:.3f} (Error={abs(exp_val-pred_logp):.3f})', fs=9, color='0.15', weight='bold')
+    print(rdkit_logp, abs(exp_val - rdkit_logp))
+    line(
+        f"Crippen: {rdkit_logp:.3f} (Error={abs(exp_val - rdkit_logp):.3f})",
+        fs=9,
+        color="0.15",
+        weight="bold",
+    )
+    line(
+        f"Model: {pred_logp:.3f} (Error={abs(exp_val - pred_logp):.3f})",
+        fs=9,
+        color="0.15",
+        weight="bold",
+    )
     y -= line_h * 0.15
 
     # Colored swatches + labels
@@ -482,34 +512,79 @@ def visualize_molecule_with_weights(mol, atom_scalars, atom_contribs,
     sw = 0.04
     sh = 0.028
 
-    ax2.add_patch(Rectangle((x0, legend_y - sh), sw, sh, transform=ax2.transAxes,
-                            facecolor='royalblue', edgecolor='black', linewidth=0.5))
-    ax2.text(x0 + sw + 0.02, legend_y, 'More hydrophilic (Pred < RDKit)', transform=ax2.transAxes,
-             fontsize=8.7, va='top')
+    ax2.add_patch(
+        Rectangle(
+            (x0, legend_y - sh),
+            sw,
+            sh,
+            transform=ax2.transAxes,
+            facecolor="royalblue",
+            edgecolor="black",
+            linewidth=0.5,
+        )
+    )
+    ax2.text(
+        x0 + sw + 0.02,
+        legend_y,
+        "More hydrophilic (Pred < Crippen)",
+        transform=ax2.transAxes,
+        fontsize=8.7,
+        va="top",
+    )
 
     legend_y -= line_h * 0.9
-    ax2.add_patch(Rectangle((x0, legend_y - sh), sw, sh, transform=ax2.transAxes,
-                            facecolor='white', edgecolor='black', linewidth=0.5))
-    ax2.text(x0 + sw + 0.02, legend_y, 'No change', transform=ax2.transAxes,
-             fontsize=8.7, va='top')
+    ax2.add_patch(
+        Rectangle(
+            (x0, legend_y - sh),
+            sw,
+            sh,
+            transform=ax2.transAxes,
+            facecolor="white",
+            edgecolor="black",
+            linewidth=0.5,
+        )
+    )
+    ax2.text(
+        x0 + sw + 0.02,
+        legend_y,
+        "No change",
+        transform=ax2.transAxes,
+        fontsize=8.7,
+        va="top",
+    )
 
     legend_y -= line_h * 0.9
-    ax2.add_patch(Rectangle((x0, legend_y - sh), sw, sh, transform=ax2.transAxes,
-                            facecolor='indianred', edgecolor='black', linewidth=0.5))
-    ax2.text(x0 + sw + 0.02, legend_y, 'More hydrophobic (Pred > RDKit)', transform=ax2.transAxes,
-             fontsize=8.7, va='top')
-
+    ax2.add_patch(
+        Rectangle(
+            (x0, legend_y - sh),
+            sw,
+            sh,
+            transform=ax2.transAxes,
+            facecolor="indianred",
+            edgecolor="black",
+            linewidth=0.5,
+        )
+    )
+    ax2.text(
+        x0 + sw + 0.02,
+        legend_y,
+        "More hydrophobic (Pred > Crippen)",
+        transform=ax2.transAxes,
+        fontsize=8.7,
+        va="top",
+    )
 
     plt.tight_layout(rect=[0.0, 0.0, 1.0, 0.92])
 
     if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
 
     # Generate 3D visualization if requested
     fig_3d = None
     if show_3d:
         title_3d = f"3D View: {title.split(':')[0] if ':' in title else title}"
-        fig_3d = visualize_molecule_3d(mol, atom_scalars, atom_contribs,
-                                        title=title_3d, save_path=save_path)
+        fig_3d = visualize_molecule_3d(
+            mol, atom_scalars, atom_contribs, title=title_3d, save_path=save_path
+        )
 
     return fig, fig_3d

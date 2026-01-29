@@ -6,18 +6,18 @@ Extracts features from RDKit molecules for use in message passing.
 import numpy as np
 from rdkit import Chem
 
-class Featurizer:
 
+class Featurizer:
     def __init__(self):
         # Define feature vocabularies
-        self.atom_types = ['C', 'N', 'O', 'S', 'F', 'Cl', 'Br', 'I', 'P', 'Other']
+        self.atom_types = ["C", "N", "O", "S", "F", "Cl", "Br", "I", "P", "Other"]
         self.hybridizations = [
             Chem.rdchem.HybridizationType.SP,
             Chem.rdchem.HybridizationType.SP2,
             Chem.rdchem.HybridizationType.SP3,
             Chem.rdchem.HybridizationType.SP3D,
             Chem.rdchem.HybridizationType.SP3D2,
-            Chem.rdchem.HybridizationType.UNSPECIFIED
+            Chem.rdchem.HybridizationType.UNSPECIFIED,
         ]
 
         # feature dimensions
@@ -29,9 +29,15 @@ class Featurizer:
         self.h_dim = 5  # 0-4
         self.valence_dim = 7  # 0-6
 
-        self.feature_dim = (self.atom_type_dim + self.degree_dim +
-                            self.charge_dim + self.hybrid_dim +
-                            self.aromatic_dim + self.h_dim + self.valence_dim)
+        self.feature_dim = (
+            self.atom_type_dim
+            + self.degree_dim
+            + self.charge_dim
+            + self.hybrid_dim
+            + self.aromatic_dim
+            + self.h_dim
+            + self.valence_dim
+        )
 
     def one_hot(self, value, vocab):
         """Create one-hot encoding"""
@@ -57,7 +63,7 @@ class Featurizer:
         # Atom type (one-hot)
         symbol = atom.GetSymbol()
         if symbol not in self.atom_types[:-1]:
-            symbol = 'Other'
+            symbol = "Other"
         features.extend(self.one_hot(symbol, self.atom_types))
 
         # Degree (one-hot, capped at 5)
@@ -156,7 +162,7 @@ class Featurizer:
             Chem.rdchem.BondType.SINGLE,
             Chem.rdchem.BondType.DOUBLE,
             Chem.rdchem.BondType.TRIPLE,
-            Chem.rdchem.BondType.AROMATIC
+            Chem.rdchem.BondType.AROMATIC,
         ]
         features.extend(self.one_hot(bond.GetBondType(), bond_types))
 
@@ -171,7 +177,7 @@ class Featurizer:
             Chem.rdchem.BondStereo.STEREONONE,
             Chem.rdchem.BondStereo.STEREOZ,
             Chem.rdchem.BondStereo.STEREOE,
-            Chem.rdchem.BondStereo.STEREOANY
+            Chem.rdchem.BondStereo.STEREOANY,
         ]
         features.extend(self.one_hot(bond.GetStereo(), stereo_types))
 
@@ -180,29 +186,29 @@ class Featurizer:
     def get_bond_features(self, mol):
         """
         Get dense bond features tensor.
-        
+
         Args:
             mol: RDKit Mol object
-            
+
         Returns:
             bond_tensor: numpy array of shape (num_atoms, num_atoms, bond_feature_dim)
         """
         num_atoms = mol.GetNumAtoms()
         # Get feature dimension from a dummy bond or hardcoded
         # We know it's 10 from featurize_bond
-        bond_dim = 10 
-        
+        bond_dim = 10
+
         bond_tensor = np.zeros((num_atoms, num_atoms, bond_dim), dtype=np.float32)
-        
+
         for bond in mol.GetBonds():
             u = bond.GetBeginAtomIdx()
             v = bond.GetEndAtomIdx()
             feat = self.featurize_bond(bond)
-            
+
             # Add features to both directions (undirected graph)
             bond_tensor[u, v] = feat
             bond_tensor[v, u] = feat
-            
+
         return bond_tensor
 
     def featurize_molecule(self, mol):

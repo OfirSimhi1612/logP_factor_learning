@@ -7,6 +7,7 @@ class AtomOnlyMLP(nn.Module):
     Simple MLP that predicts per-atom scalars from atom features only.
     No message passing, no molecular context - each atom is independent.
     """
+
     def __init__(self, input_dim, hidden_dims):
         super(AtomOnlyMLP, self).__init__()
 
@@ -37,6 +38,7 @@ class ContextOnlyMLP(nn.Module):
     MLP that predicts logP directly from pooled molecular features.
     No per-atom scalars - just global molecular context.
     """
+
     def __init__(self, input_dim, hidden_dims):
         super(ContextOnlyMLP, self).__init__()
 
@@ -80,9 +82,7 @@ class ContextualAtomScalarMLP(nn.Module):
         atom_encoding_dim = prev_dim
 
         self.mol_context = nn.Sequential(
-            nn.Linear(atom_encoding_dim, hidden_dims[-1]),
-            nn.ReLU(),
-            nn.Dropout(0.2)
+            nn.Linear(atom_encoding_dim, hidden_dims[-1]), nn.ReLU(), nn.Dropout(0.2)
         )
         mol_context_dim = hidden_dims[-1]
 
@@ -90,7 +90,7 @@ class ContextualAtomScalarMLP(nn.Module):
             nn.Linear(atom_encoding_dim + mol_context_dim, hidden_dims[-1]),
             nn.ReLU(),
             nn.Dropout(0.2),
-            nn.Linear(hidden_dims[-1], 1)
+            nn.Linear(hidden_dims[-1], 1),
         )
 
     def forward(self, atom_features):
@@ -102,12 +102,18 @@ class ContextualAtomScalarMLP(nn.Module):
         """
         atom_encodings = self.atom_encoder(atom_features)  # (num_atoms, encoding_dim)
 
-        mol_context = torch.mean(atom_encodings, dim=0, keepdim=True)  # (1, encoding_dim)
+        mol_context = torch.mean(
+            atom_encodings, dim=0, keepdim=True
+        )  # (1, encoding_dim)
         mol_context = self.mol_context(mol_context)  # (1, context_dim)
 
-        mol_context_broadcast = mol_context.expand(atom_encodings.size(0), -1)  # (num_atoms, context_dim)
+        mol_context_broadcast = mol_context.expand(
+            atom_encodings.size(0), -1
+        )  # (num_atoms, context_dim)
 
-        atom_with_context = torch.cat([atom_encodings, mol_context_broadcast], dim=1)  # (num_atoms, encoding_dim + context_dim)
+        atom_with_context = torch.cat(
+            [atom_encodings, mol_context_broadcast], dim=1
+        )  # (num_atoms, encoding_dim + context_dim)
 
         scalars = self.scalar_predictor(atom_with_context)  # (num_atoms, 1)
 

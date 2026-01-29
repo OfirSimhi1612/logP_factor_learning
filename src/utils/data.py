@@ -32,7 +32,7 @@ CACHE_FILE = DATA_DIR / "cache" / "processed_molecules_cache.pkl"
 def get_dataset():
     """Load the lipophilicity dataset, downloading if necessary."""
     DATA_DIR.mkdir(exist_ok=True)
-    csv_path = DATA_DIR / 'LogP.csv'
+    csv_path = DATA_DIR / "LogP.csv"
 
     if csv_path.exists():
         df = pd.read_csv(csv_path)
@@ -47,15 +47,20 @@ def get_dataset():
 
 def get_features_and_targets(df, use_cache=True):
     if use_cache and CACHE_FILE.exists():
-        with open(CACHE_FILE, 'rb') as f:
+        with open(CACHE_FILE, "rb") as f:
             cache_data = pickle.load(f)
-        return cache_data['X_atom_fps'], cache_data['atom_rdkit_score'], cache_data['mol_indexs'], cache_data['mol_data']
+        return (
+            cache_data["X_atom_fps"],
+            cache_data["atom_rdkit_score"],
+            cache_data["mol_indexs"],
+            cache_data["mol_data"],
+        )
 
     # Check your column name! It might be 'smiles' or 'Original_SMILES'
-    df['smiles'] = df['smiles'].astype(str).str.split('|').str[0]
+    df["smiles"] = df["smiles"].astype(str).str.split("|").str[0]
 
     # 2. Verify the pipes are gone (should print Empty DataFrame)
-    print("Rows with pipes:", df[df['smiles'].str.contains('\|')])
+    print("Rows with pipes:", df[df["smiles"].str.contains("\|")])
 
     X_atom_fps = []
     y_atom_target = []
@@ -68,37 +73,38 @@ def get_features_and_targets(df, use_cache=True):
     featurizer = Featurizer()
 
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing molecules"):
-        smiles_str = row['smiles']
+        smiles_str = row["smiles"]
         if "|" in smiles_str:
             smiles_str = smiles_str.split("|")[0]
 
         mol = Chem.MolFromSmiles(smiles_str)
-        if mol is None: continue
+        if mol is None:
+            continue
 
         atom_contribs = np.array([x[0] for x in Crippen._GetAtomContribs(mol)])
         rdkit_logp = atom_contribs.sum()
 
-        exp_logp = row['exp']
+        exp_logp = row["exp"]
 
         num_atoms = mol.GetNumAtoms()
 
         mol_info = {
-            'mol_index': mol_counter,
-            'smiles': row['smiles'],
-            'exp_logp': exp_logp,
-            'rdkit_logp': rdkit_logp,
-            'mw': Descriptors.MolWt(mol),
-            'num_atoms': num_atoms,
-            'atom_contribs': atom_contribs.copy()
+            "mol_index": mol_counter,
+            "smiles": row["smiles"],
+            "exp_logp": exp_logp,
+            "rdkit_logp": rdkit_logp,
+            "mw": Descriptors.MolWt(mol),
+            "num_atoms": num_atoms,
+            "atom_contribs": atom_contribs.copy(),
         }
         mol_data.append(mol_info)
-        
+
         atom_feats, bond_feats, adj = featurizer.featurize_molecule(mol)
-        
+
         atom_feats_t = torch.from_numpy(atom_feats)
         bond_feats_t = torch.from_numpy(bond_feats)
         adj_t = torch.from_numpy(adj)
-        
+
         atom_embeddings = cmpnn(adj_t, atom_feats_t, bond_feats_t, return_atoms=True)
         atom_embeddings = atom_embeddings.detach().numpy()
 
@@ -118,15 +124,15 @@ def get_features_and_targets(df, use_cache=True):
 
     if use_cache:
         cache_data = {
-            'X_atom_fps': X_atom_fps,
-            'y_atom_target': y_atom_target,
-            'atom_rdkit_score': atom_rdkit_score,
-            'mol_indexs': mol_indexs,
-            'mol_data': mol_data,
-            'num_molecules': len(mol_data),
-            'num_atoms': len(X_atom_fps)
+            "X_atom_fps": X_atom_fps,
+            "y_atom_target": y_atom_target,
+            "atom_rdkit_score": atom_rdkit_score,
+            "mol_indexs": mol_indexs,
+            "mol_data": mol_data,
+            "num_molecules": len(mol_data),
+            "num_atoms": len(X_atom_fps),
         }
-        with open(CACHE_FILE, 'wb') as f:
+        with open(CACHE_FILE, "wb") as f:
             pickle.dump(cache_data, f)
 
     return X_atom_fps, atom_rdkit_score, mol_indexs, mol_data
@@ -153,9 +159,9 @@ def create_and_save_splits(mol_indexs, mol_data):
 
         pd.DataFrame(split_data).to_csv(filename, index=False)
 
-    save_split_csv(train_mol_indexs, SPLITS_DIR / 'train.csv')
-    save_split_csv(val_mol_indexs, SPLITS_DIR / 'val.csv')
-    save_split_csv(test_mol_indexs, SPLITS_DIR / 'test.csv')
+    save_split_csv(train_mol_indexs, SPLITS_DIR / "train.csv")
+    save_split_csv(val_mol_indexs, SPLITS_DIR / "val.csv")
+    save_split_csv(test_mol_indexs, SPLITS_DIR / "test.csv")
 
     return train_mol_indexs, val_mol_indexs, test_mol_indexs
 
@@ -164,15 +170,28 @@ def get_dataloaders(batch_size):
     df = get_dataset()
     X_atoms, atom_contribs, mol_indexs, mol_data = get_features_and_targets(df)
 
-    train_mol_indexs, val_mol_indexs, test_mol_indexs = create_and_save_splits(mol_indexs, mol_data)
+    train_mol_indexs, val_mol_indexs, test_mol_indexs = create_and_save_splits(
+        mol_indexs, mol_data
+    )
 
-    train_dataset = MoleculeDataset(X_atoms, atom_contribs, mol_indexs, mol_data, train_mol_indexs)
-    val_dataset = MoleculeDataset(X_atoms, atom_contribs, mol_indexs, mol_data, val_mol_indexs)
-    test_dataset = MoleculeDataset(X_atoms, atom_contribs, mol_indexs, mol_data, test_mol_indexs)
+    train_dataset = MoleculeDataset(
+        X_atoms, atom_contribs, mol_indexs, mol_data, train_mol_indexs
+    )
+    val_dataset = MoleculeDataset(
+        X_atoms, atom_contribs, mol_indexs, mol_data, val_mol_indexs
+    )
+    test_dataset = MoleculeDataset(
+        X_atoms, atom_contribs, mol_indexs, mol_data, test_mol_indexs
+    )
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_molecules)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_molecules)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_molecules)
-    
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_molecules
+    )
+    val_loader = DataLoader(
+        val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_molecules
+    )
+    test_loader = DataLoader(
+        test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_molecules
+    )
+
     return train_loader, val_loader, test_loader
-
