@@ -46,6 +46,22 @@ def get_dataset():
 
 
 def get_features_and_targets(df, use_cache=True):
+    """
+    Process molecules and extract features for training.
+
+    For each molecule, runs message passing to create contextualized atom embeddings
+    and extracts RDKit Crippen atomic contributions as baseline.
+
+    Args:
+        df: DataFrame with 'smiles' and 'exp' columns
+        use_cache: If True, load/save processed data from pickle cache
+
+    Returns:
+        X_atom_fps: Array of atom embeddings, shape (total_atoms, embedding_dim)
+        atom_rdkit_score: Array of RDKit Crippen contributions per atom
+        mol_indexs: Array mapping each atom to its molecule index
+        mol_data: List of dicts with molecule info (smiles, exp_logp, rdkit_logp, mw, etc.)
+    """
     if use_cache and CACHE_FILE.exists():
         with open(CACHE_FILE, "rb") as f:
             cache_data = pickle.load(f)
@@ -167,6 +183,20 @@ def create_and_save_splits(mol_indexs, mol_data):
 
 
 def get_dataloaders(batch_size):
+    """
+    Create train, validation, and test DataLoaders.
+
+    Loads the dataset, processes molecules, creates splits, and returns
+    DataLoaders ready for training.
+
+    Args:
+        batch_size: Number of molecules per batch
+
+    Returns:
+        train_loader: DataLoader for training set
+        val_loader: DataLoader for validation set
+        test_loader: DataLoader for test set
+    """
     df = get_dataset()
     X_atoms, atom_contribs, mol_indexs, mol_data = get_features_and_targets(df)
 

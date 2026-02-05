@@ -492,7 +492,6 @@ def visualize_molecule_with_weights(
     if exp_val is not None:
         line(f"Experimental: {exp_val:.3f}", fs=9, color="0.15", weight="bold")
 
-    print(rdkit_logp, abs(exp_val - rdkit_logp))
     line(
         f"Crippen: {rdkit_logp:.3f} (Error={abs(exp_val - rdkit_logp):.3f})",
         fs=9,

@@ -97,8 +97,8 @@ class MessagePassingGraph(nn.Module):
 # --- Usage Example ---
 if __name__ == "__main__":
     smiles = "Cn1c(CN2CCN(CC2)c3ccc(Cl)cc3)nc4ccccc14"
-    feturizer = Featurizer()
-    atom_features, bond_features, adj = feturizer.featurize_molecule(
+    featurizer = Featurizer()
+    atom_features, bond_features, adj = featurizer.featurize_molecule(
         Chem.MolFromSmiles(smiles)
     )
 

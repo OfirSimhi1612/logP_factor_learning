@@ -1,197 +1,79 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-This is a deep learning research project focused on predicting molecular lipophilicity (logP) using a **Contextual Atom Scalar MLP** architecture. The key innovation is modeling each atom's contribution to logP as a function of both local atomic environment and global molecular context, rather than using fixed atomic contributions as in traditional methods (like RDKit's Crippen-Wildman).
+Deep learning project for predicting molecular lipophilicity (logP) by learning per-atom scalar corrections to RDKit's Crippen-Wildman baseline. The model uses message passing to create contextual atom embeddings, then predicts scalars that adjust each atom's contribution based on molecular context.
 
-The model learns scalar multipliers that adjust RDKit's baseline atomic contributions, conditioned on the entire molecular structure via message passing neural networks.
+**Prediction formula**: `logP = sum(rdkit_contrib[i] * scalar[i])`
 
-## Development Environment
+## Quick Start
 
-### Setup
 ```bash
-# Using conda (recommended)
+# Setup
 conda env create -f environment.yml
 conda activate logp_pred
 
-# Or using pip
-pip install -r requirements.txt
-```
-
-### Key Dependencies
-- PyTorch: Neural network framework
-- RDKit: Molecular featurization and baseline logP calculation
-- NumPy, scikit-learn: Data processing
-- Seaborn, matplotlib: Visualization
-
-### Running the Project
-The primary workflow is through the Jupyter notebook:
-```bash
+# Run
 jupyter notebook main.ipynb
 ```
 
-For standalone training/evaluation:
-```bash
-python main.py
-```
-
-## Architecture Deep Dive
-
-### Three-Stage Pipeline
-
-#### 1. Molecular Featurization (`src/mp_graph/`)
-- **`featurizer.py`**: Converts RDKit molecules into graph representations
-  - Atom features (44-dim): atom type, degree, charge, hybridization, aromaticity, hydrogens, valence
-  - Bond features (10-dim): bond type, conjugation, ring membership, stereochemistry
-  - Outputs: atom feature matrix, bond feature tensor, adjacency matrix
-
-- **`mp_graph.py`**: Message passing neural network (MPNN)
-  - Performs `depth=3` rounds of message passing to create contextualized atom embeddings
-  - Each atom aggregates information from neighbors up to 3 bonds away
-  - Zero-padding handles variable atom/bond feature dimensions
-  - Can return either per-atom embeddings (`return_atoms=True`) or graph-level pooling
-
-#### 2. Contextual Scalar Prediction (`src/mlp_regressor/mlp.py`)
-The `ContextualAtomScalarMLP` has three components:
-
-1. **Atom Encoder**: Projects MPNN embeddings through feed-forward layers
-2. **Molecular Context Module**: Mean-pools atom encodings and extracts global features
-3. **Scalar Predictor**: Concatenates local (atom encoding) + global (molecular context) to predict per-atom scalars
-
-**Critical insight**: Each atom's scalar is conditioned on the entire molecule's structure, not just local environment.
-
-Final prediction: `logP = sum(rdkit_contrib[i] * scalar[i])`
-
-#### 3. Training & Evaluation (`src/mlp_regressor/training.py`)
-- **Custom dataset**: `MoleculeDataset` handles variable-length molecules (different atom counts)
-- **Custom collate**: Returns list of molecules (not batched tensors) since each molecule has different size
-- **Loss**: MSE between predicted and experimental logP at molecule level
-- **Evaluation metrics**: RMSE and MAE, stratified by molecular weight (MW > 500 Da for "large" molecules)
-
-### Data Pipeline (`src/utils/data.py`)
-
-**Key functions**:
-- `get_dataset()`: Downloads Lipophilicity dataset from DeepChem S3 if not cached
-- `get_features_and_targets()`:
-  - Processes each molecule through MPNN featurizer
-  - Extracts RDKit Crippen atomic contributions as baseline
-  - **Uses pickle cache** (`data/cache/processed_molecules_cache.pkl`) to avoid reprocessing
-- `create_and_save_splits()`: Saves train/val/test splits to `data/splits/`
-- `get_dataloaders()`: Orchestrates the full pipeline
-
-**Important**: The cache file is critical for performance. Delete it if you change featurization or MPNN depth.
-
-### Visualization (`src/utils/visualization.py`)
-
-- `get_atom_features_from_mol()`: Extract features for a single molecule
-- `predict_atom_scalars()`: Run inference to get per-atom predictions
-- `visualize_molecule_with_weights()`: Creates 2D visualization with atoms colored by hydrophobicity shift
-  - Blue = More hydrophilic than RDKit (scalar < 1.0)
-  - Red = More hydrophobic than RDKit (scalar > 1.0)
-  - White = No change (scalar ≈ 1.0)
-- `visualize_molecule_3d()`: 3D conformer with same coloring scheme
-
-## File Organization
+## Project Structure
 
 ```
-.
-├── main.py                    # Standalone training script
-├── main.ipynb                 # Interactive notebook (recommended workflow)
+├── main.ipynb              # Primary workflow notebook
 ├── src/
-│   ├── mlp_regressor/
-│   │   ├── mlp.py            # ContextualAtomScalarMLP model
-│   │   └── training.py       # Dataset, training loop, evaluation
 │   ├── mp_graph/
-│   │   ├── featurizer.py     # Molecule → graph conversion
-│   │   └── mp_graph.py       # Message passing implementation
+│   │   ├── featurizer.py   # Molecule → graph (40-dim atom, 10-dim bond features)
+│   │   └── mp_graph.py     # Message passing (depth=3, no learnable params)
+│   ├── mlp_regressor/
+│   │   ├── mlp.py          # Three model variants (see below)
+│   │   └── training.py     # Dataset, train_epoch, evaluate functions
 │   └── utils/
-│       ├── data.py           # Data loading & preprocessing
-│       └── visualization.py  # Molecule visualization tools
+│       ├── data.py         # Data loading, caching, splits
+│       └── visualization.py # 2D/3D molecule visualization
 ├── data/
-│   ├── LogP.csv              # Downloaded dataset
-│   ├── splits/               # Train/val/test CSVs
-│   └── cache/                # Processed molecule cache (pickle)
+│   ├── LogP.csv            # ~14K molecules from DeepChem
+│   ├── cache/              # Pickle cache for processed molecules
+│   └── splits/             # train/val/test CSVs
 └── checkpoints/
-    └── prod.pt               # Trained model weights
+    └── prod.pt             # Production model weights
 ```
 
-## Common Development Tasks
+## Model Variants (src/mlp_regressor/mlp.py)
 
-### Training a New Model
+1. **ContextualAtomScalarMLP** (main model): Per-atom scalars conditioned on global molecular context via mean pooling
+2. **AtomOnlyMLP**: Per-atom scalars from local features only (no context)
+3. **ContextOnlyMLP**: Single logP prediction from pooled molecular features (no per-atom)
+
+## Key Functions
+
 ```python
-from src.utils.data import get_dataloaders
+# Data loading
+from src.utils.data import get_dataloaders, get_features_and_targets
+train_loader, val_loader, test_loader = get_dataloaders(batch_size=64)
+
+# Model
 from src.mlp_regressor.mlp import ContextualAtomScalarMLP
-from src.mlp_regressor.training import train_epoch, evaluate
-
-# Configuration
-HIDDEN_LAYERS = [40, 40, 32]
-LEARNING_RATE = 0.001
-BATCH_SIZE = 32
-
-# Get data
-train_loader, val_loader, test_loader = get_dataloaders(BATCH_SIZE)
-
-# Initialize model
-sample_batch = next(iter(train_loader))
-input_dim = sample_batch[0]['atom_features'].shape[1]
-model = ContextualAtomScalarMLP(input_dim=input_dim, hidden_dims=HIDDEN_LAYERS)
-```
-
-### Loading a Trained Model
-```python
+model = ContextualAtomScalarMLP(input_dim=40, hidden_dims=[40, 40, 32])
 model.load_state_dict(torch.load('checkpoints/prod.pt'))
-model.eval()
-```
 
-### Visualizing Predictions
-```python
-from rdkit import Chem
+# Visualization
 from src.utils.visualization import predict_atom_scalars, visualize_molecule_with_weights
-
-smiles = "CCO"  # Ethanol
-mol = Chem.MolFromSmiles(smiles)
 atom_scalars, atom_contribs = predict_atom_scalars(model, mol, device)
-fig, fig_3d = visualize_molecule_with_weights(mol, atom_scalars, atom_contribs)
-```
-
-### Clearing Cache
-If you modify featurization or MPNN:
-```bash
-rm -rf data/cache/
+visualize_molecule_with_weights(mol, atom_scalars, atom_contribs, show_3d=True)
 ```
 
 ## Important Notes
 
-### Data Handling
-- SMILES strings may contain pipes (`|`) for stereochemistry - these are automatically stripped
-- Molecular indices (`mol_index`) are critical for aligning atom-level data with molecule-level targets
-- Dataset uses custom collate function because molecules have variable atom counts
+- **Cache**: Delete `data/cache/` if you change featurization or message passing depth
+- **Training**: To retrain, rename `checkpoints/prod.pt` to something else; otherwise the notebook loads it and skips training
+- **Custom collate**: Molecules have variable atom counts, so DataLoader uses list batching via `collate_molecules`
+- **SMILES cleaning**: Pipes (`|`) in SMILES are stripped during preprocessing
 
-### Model Training
-- Early stopping with patience=10 epochs on validation MSE
-- Model saves to `best_model_contextual.pt` (in main.py) or `checkpoints/prod.pt`
-- Training loss is averaged per-molecule, not per-atom
+## Training Config (defaults in main.ipynb)
 
-### Evaluation Strategy
-- Primary benchmark: RDKit Crippen-Wildman logP
-- Stratify by molecular weight (MW > 500 Da) to assess performance on larger molecules where RDKit has higher variance
-- Sanity checks in `main.py` verify data alignment between molecules, targets, and baselines
-
-### Architecture Constraints
-- MPNN depth=3 is hardcoded in data preprocessing (affects cache)
-- Atom feature dimension (44) and bond feature dimension (10) are determined by featurizer
-- Model input dimension is MPNN output dimension (max of atom/bond feature dims after padding)
-
-### Device Handling
-All training/evaluation code uses:
-```python
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-```
-
-## Research Context
-
-The goal is to improve logP prediction accuracy on **large molecules (MW > 500 Da)** where traditional fragment-based methods struggle. The hypothesis is that atomic contributions are context-dependent and can be learned through neural networks that model molecular structure holistically.
-
-Key experimental result to track: percentage RMSE improvement on large molecules compared to RDKit baseline.
+- Hidden layers: [40, 40, 32]
+- Learning rate: 0.001 with ReduceLROnPlateau
+- Batch size: 64
+- Early stopping: patience=10
+- Loss: MSE on molecule-level logP

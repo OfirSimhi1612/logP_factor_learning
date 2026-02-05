@@ -8,6 +8,13 @@ from rdkit import Chem
 
 
 class Featurizer:
+    """
+    Molecular featurizer that converts RDKit molecules into graph representations.
+
+    Extracts atom features (40-dim), bond features (10-dim), and adjacency matrices
+    for use in message passing neural networks.
+    """
+
     def __init__(self):
         # Define feature vocabularies
         self.atom_types = ["C", "N", "O", "S", "F", "Cl", "Br", "I", "P", "Other"]

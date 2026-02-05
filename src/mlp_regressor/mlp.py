@@ -67,6 +67,18 @@ class ContextOnlyMLP(nn.Module):
 
 
 class ContextualAtomScalarMLP(nn.Module):
+    """
+    MLP that predicts per-atom scalar multipliers conditioned on molecular context.
+
+    Each atom's scalar is computed using both its local encoding and a global
+    molecular context vector (mean-pooled atom encodings). The final logP prediction
+    is: sum(rdkit_contrib[i] * scalar[i]).
+
+    Args:
+        input_dim: Dimension of input atom features (from message passing)
+        hidden_dims: List of hidden layer dimensions. Last dim is used for context.
+    """
+
     def __init__(self, input_dim, hidden_dims):
         super(ContextualAtomScalarMLP, self).__init__()
 

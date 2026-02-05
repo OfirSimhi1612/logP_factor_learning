@@ -12,6 +12,20 @@ from tqdm import tqdm
 
 
 class MoleculeDataset(Dataset):
+    """
+    PyTorch Dataset for molecule-level logP prediction.
+
+    Stores atom-level features and groups them by molecule index for training.
+    Each item returns all atoms for a single molecule.
+
+    Args:
+        X_atoms: Array of atom features, shape (total_atoms, feature_dim)
+        atom_contribs: Array of RDKit Crippen contributions per atom
+        mol_indexs: Array mapping each atom to its molecule index
+        mol_data: List of dictionaries with molecule-level info (exp_logp, rdkit_logp, mw)
+        mol_index_list: List of molecule indices to include in this dataset (for splits)
+    """
+
     def __init__(self, X_atoms, atom_contribs, mol_indexs, mol_data, mol_index_list):
         self.X_atoms = X_atoms
         self.atom_contribs = atom_contribs
