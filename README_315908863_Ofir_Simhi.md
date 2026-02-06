@@ -1,12 +1,12 @@
 README_315908863_Ofir_Simhi
 Ofir Simhi, ID: 315908863
 
-================================================================================
-PROJECT: Contextual Atom Scalar Model for Molecular Lipophilicity (logP) Prediction
-================================================================================
 
-DESCRIPTION
------------
+Contextual Atom Scalar Model for Molecular Lipophilicity (logP) Prediction
+-----------------------------------------------------------------------------------
+
+### DESCRIPTION
+---------------
 This project predicts molecular lipophilicity (logP) using a deep learning model
 that learns per-atom scalar corrections to RDKit's Crippen-Wildman baseline.
 
@@ -17,15 +17,14 @@ entire molecular structure.
 Prediction formula: logP = sum(rdkit_contrib[i] * scalar[i])
 
 
-================================================================================
-DATA FILES
-================================================================================
-
+### DATA FILES
+--------------
 Source: DeepChem Lipophilicity Dataset
 URL: https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/Lipophilicity.csv
-Citation: MoleculeNet benchmark (Wu et al., 2018)
+
+(MoleculeNet benchmark (Wu et al., 2018)
           "MoleculeNet: A Benchmark for Molecular Machine Learning"
-          Chemical Science, 2018
+          Chemical Science, 2018)
 
 The dataset contains ~14,000 molecules with experimental logP measurements.
 
@@ -39,10 +38,9 @@ Generated files (created automatically):
 - data/splits/test.csv                      - Test set split
 
 
-================================================================================
-CODE FILES - EXECUTION ORDER
-================================================================================
 
+### CODE FILES - EXECUTION ORDER
+--------------------------------
 PRIMARY WORKFLOW: Run main.ipynb from start to finish.
 
 The notebook is organized into sections:
@@ -55,23 +53,21 @@ The notebook is organized into sections:
 7. Model evaluation on test set
 8. Per-atom contribution visualization
 
-To retrain the model: rename checkpoints/prod.pt before running.
+To re-train the model: rename checkpoints/prod.pt before running.
 
 
-================================================================================
-CODE FILES - DETAILED DESCRIPTIONS
-================================================================================
+### CODE FILES - DETAILED DESCRIPTIONS
+--------------------------------------
+### main.ipynb
 
-main.ipynb
-----------
 Input: None (downloads data automatically)
 Output: Trained model (checkpoints/), visualizations, evaluation metrics
 Description: Main Jupyter notebook containing the complete workflow from data
 loading through model training and evaluation. Run cells sequentially.
 
 
-src/mp_graph/featurizer.py
---------------------------
+### src/mp_graph/featurizer.py
+
 Input: RDKit Mol object
 Output: atom_features (N x 40), bond_features (N x N x 10), adjacency (N x N)
 Description: Converts molecules into graph representations for neural networks.
@@ -80,8 +76,8 @@ Description: Converts molecules into graph representations for neural networks.
 - Bond features (10-dim): bond type, conjugation, ring membership, stereochemistry
 
 
-src/mp_graph/mp_graph.py
-------------------------
+### src/mp_graph/mp_graph.py
+
 Input: adjacency matrix, atom features, bond features
 Output: Contextualized atom embeddings (N x D) or graph-level vector (D,)
 Description: Message Passing Neural Network that performs 3 rounds of message
@@ -89,8 +85,8 @@ passing to create atom embeddings that capture local chemical environment.
 Each atom aggregates information from neighbors up to 3 bonds away.
 
 
-src/mlp_regressor/mlp.py
-------------------------
+### src/mlp_regressor/mlp.py
+
 Input: Atom feature tensor (N x input_dim)
 Output: Per-atom scalar predictions (N,)
 Description: Contains three model architectures:
@@ -100,8 +96,8 @@ Description: Contains three model architectures:
 3. ContextOnlyMLP - Baseline. Single logP from pooled molecular features.
 
 
-src/mlp_regressor/training.py
------------------------------
+### src/mlp_regressor/training.py
+
 Input: Model, DataLoader, optimizer, criterion, device
 Output: Training loss, evaluation metrics (predictions, targets, baselines)
 Description: Training and evaluation utilities including:
@@ -111,8 +107,8 @@ Description: Training and evaluation utilities including:
 - evaluate: Model evaluation returning predictions and metrics
 
 
-src/utils/data.py
------------------
+### src/utils/data.py
+
 Input: None (or DataFrame)
 Output: DataLoaders for train/val/test
 Description: Data loading and preprocessing pipeline:
@@ -122,8 +118,8 @@ Description: Data loading and preprocessing pipeline:
 - get_dataloaders(): Main entry point returning ready-to-use DataLoaders
 
 
-src/utils/visualization.py
---------------------------
+### src/utils/visualization.py
+
 Input: RDKit Mol, atom scalars, atom contributions
 Output: Matplotlib figures (2D and 3D molecular visualizations)
 Description: Visualization utilities for interpreting model predictions:
@@ -133,20 +129,21 @@ Description: Visualization utilities for interpreting model predictions:
 Color scheme: Blue = more hydrophilic, White = no change, Red = more hydrophobic
 
 
-================================================================================
-FILE STRUCTURE
-================================================================================
 
+### FILE STRUCTURE
+------------------
+
+```text
 logP_factor_learning/
-├── main.ipynb                 # Primary workflow notebook - RUN THIS
-├── README_315908863_Ofir_Simhi # This file
-├── requirements.txt           # Python dependencies
-├── environment.yml            # Conda environment specification
+├── main.ipynb                      # Primary workflow notebook - RUN THIS
+├── README_315908863_Ofir_Simhi.md  # This file
+├── requirements.txt                # Python dependencies
+├── environment.yml                 # Conda environment specification
 │
 ├── src/
 │   ├── mp_graph/
 │   │   ├── featurizer.py     # Molecule to graph conversion
-│   │   └── mp_graph.py       # Message passing neural network
+│   │   └── mp_graph.py       # Message passing graph
 │   ├── mlp_regressor/
 │   │   ├── mlp.py            # Model architectures
 │   │   └── training.py       # Training and evaluation functions
@@ -161,11 +158,11 @@ logP_factor_learning/
 │
 └── checkpoints/
     └── prod.pt               # Pre-trained model weights
+```
 
 
-================================================================================
-SETUP AND INSTALLATION
-================================================================================
+### SETUP AND INSTALLATION
+--------------------------
 
 Option 1 - Conda (recommended):
     conda env create -f environment.yml
@@ -177,9 +174,8 @@ Option 2 - pip:
     jupyter notebook main.ipynb
 
 
-================================================================================
-DEPENDENCIES
-================================================================================
+### DEPENDENCIES
+-----------------
 
 - Python 3.8+
 - PyTorch
@@ -195,9 +191,8 @@ DEPENDENCIES
 See requirements.txt for exact versions.
 
 
-================================================================================
-NOTES
-================================================================================
+### NOTES
+---------
 
 - All file paths in the code are relative to the project root
 - Data is downloaded automatically on first run
