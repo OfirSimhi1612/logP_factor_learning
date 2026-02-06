@@ -2,7 +2,6 @@
 Data loading and preprocessing for the Contextual Atom Scalar MLP.
 """
 
-import os
 import io
 import pickle
 import requests

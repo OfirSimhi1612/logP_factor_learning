@@ -185,7 +185,7 @@ def visualize_molecule_3d(
     try:
         AllChem.EmbedMolecule(mol_3d, randomSeed=42)
         AllChem.MMFFOptimizeMolecule(mol_3d)
-    except Exception as e:
+    except Exception:
         # Fallback to 2D coordinates if 3D generation fails
         AllChem.Compute2DCoords(mol_3d)
 
