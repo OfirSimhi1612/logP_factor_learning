@@ -1,3 +1,4 @@
+# Ofir Simhi, ID: 315908863
 """
 Training and evaluation utilities for the Contextual Atom Scalar MLP.
 
@@ -34,9 +35,25 @@ class MoleculeDataset(Dataset):
         self.mol_index_list = mol_index_list
 
     def __len__(self):
+        """Return the number of molecules in this dataset split."""
         return len(self.mol_index_list)
 
     def __getitem__(self, idx):
+        """
+        Retrieve all atom-level data for a single molecule by split index.
+
+        Args:
+            idx: Index into this dataset's mol_index_list
+
+        Returns:
+            dict with keys:
+                - atom_features: FloatTensor (num_atoms, feature_dim)
+                - atom_rdkit_score: FloatTensor (num_atoms,) WC contributions c_i
+                - exp_logp: FloatTensor (1,) experimental logP target
+                - rdkit_logp: FloatTensor (1,) Crippen baseline logP
+                - mw: float, molecular weight
+                - mol_index: int, global molecule index
+        """
         mol_index = self.mol_index_list[idx]
 
         # Get all atoms for this molecule
@@ -62,8 +79,21 @@ class MoleculeDataset(Dataset):
 
 
 def collate_molecules(batch):
-    """Custom collate function since molecules have different numbers of atoms"""
-    return batch  # Return list of molecules
+    """
+    Custom collate function that returns a list of molecule dicts instead
+    of stacking into a single tensor.
+
+    This is necessary because molecules have different numbers of atoms,
+    so atom feature tensors cannot be stacked along a batch dimension.
+    PyTorch's default collate would fail on these variable-length tensors.
+
+    Args:
+        batch: list of dicts, each from MoleculeDataset.__getitem__
+
+    Returns:
+        The same list of dicts, unmodified (no stacking/padding)
+    """
+    return batch
 
 
 def train_epoch(model, dataloader, optimizer, criterion, device):
@@ -87,26 +117,27 @@ def train_epoch(model, dataloader, optimizer, criterion, device):
     for batch in tqdm(dataloader, desc="Training", leave=False):
         batch_loss = 0
 
+        # Process each molecule individually because molecules have
+        # different numbers of atoms (variable-size tensors)
         for mol_data in batch:
-            # Get molecule data
             atom_features = mol_data["atom_features"].to(device)
             atom_rdkit_score = mol_data["atom_rdkit_score"].to(device)
             exp_logp = mol_data["exp_logp"].to(device)
 
-            # Forward pass: get context-aware scalar for each atom
-            # The network sees ALL atoms at once and outputs a vector of scalars
+            # Forward pass: predict per-atom modulation factors f_i
             atom_scalars = model(atom_features)  # (num_atoms,)
 
-            # Aggregate: sum(rdkit_contrib * scalar)
+            # Core prediction: logP_corr = sum(c_i * f_i)
+            # Each atom's WC baseline contribution c_i is scaled by the
+            # learned factor f_i, then summed for molecule-level logP
             predicted_logp = torch.sum(atom_rdkit_score * atom_scalars)
 
-            # Compute loss
             loss = criterion(predicted_logp.unsqueeze(0), exp_logp)
             batch_loss += loss
 
             num_molecules += 1
 
-        # Backward pass
+        # Average loss over molecules in this batch before backpropagation
         optimizer.zero_grad()
         batch_loss = batch_loss / len(batch)
         batch_loss.backward()

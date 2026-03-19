@@ -1,3 +1,13 @@
+# Ofir Simhi, ID: 315908863
+"""
+CMPNN-inspired message passing neural network for molecular graphs.
+
+Implements a parameter-free message passing scheme (Song et al., 2020) that
+propagates information along bonds to produce contextualized atom embeddings.
+Each atom aggregates neighbor information over multiple rounds, capturing
+local chemical environment up to `depth` bonds away.
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -46,7 +56,9 @@ class MessagePassingGraph(nn.Module):
         # Mask: (N, N, 1)
         mask = (adj_matrix > 0).float().unsqueeze(-1)
 
-        # 0. Zero-Pad Inputs to Match Dimensions
+        # Zero-pad atom or bond features so both have the same dimension (d_max).
+        # This is needed because message passing adds atom and bond vectors together,
+        # which requires matching dimensions.
         if d_atom < d_max:
             current_atoms = F.pad(atom_features, (0, d_max - d_atom))
         else:
@@ -57,20 +69,31 @@ class MessagePassingGraph(nn.Module):
         else:
             current_messages = bond_features
 
-        # Keep initial aligned bonds for residual
+        # Keep initial bond features for residual connection in each MP step
         initial_bonds = current_messages.clone()
 
-        # Atom identity injection
+        # Inject source atom identity into each edge message:
+        # atom_broadcast[i,j] = atom_features[i] for all j, so each outgoing
+        # message from atom i carries that atom's identity
         atom_broadcast = current_atoms.unsqueeze(1).expand(-1, num_atoms, -1)
         current_messages = (current_messages + atom_broadcast) * mask
 
-        # --- Message Passing Loop ---
+        # --- Message Passing Loop (CMPNN-inspired, Song et al. 2020) ---
+        # Each iteration propagates information one bond further through the graph.
+        # After `depth` iterations, each atom has context from neighbors up to
+        # `depth` bonds away.
         for _ in range(self.depth):
+            # Sum all incoming messages to each atom: (N, d_max)
             incoming_sum = torch.sum(current_messages, dim=0)
+            # Update atom embeddings with aggregated neighbor information
             current_atoms = current_atoms + incoming_sum
+            # Broadcast aggregated messages for constructing next round's messages
             total_broad = incoming_sum.unsqueeze(1).expand(-1, num_atoms, -1)
+            # Subtract reverse-direction message to prevent information backflow
+            # (atom j should not send back what atom i just sent it)
             reverse_messages = current_messages.transpose(0, 1)
             new_messages = total_broad - reverse_messages
+            # Add residual bond features and source atom identity, mask by adjacency
             current_messages = (new_messages + initial_bonds + atom_broadcast) * mask
 
         # --- Output Selection ---
@@ -94,7 +117,10 @@ class MessagePassingGraph(nn.Module):
         return graph_feature
 
 
-# --- Usage Example ---
+# ============================================================
+# Usage example (only runs when this file is executed directly,
+# not when imported as a module)
+# ============================================================
 if __name__ == "__main__":
     smiles = "Cn1c(CN2CCN(CC2)c3ccc(Cl)cc3)nc4ccccc14"
     featurizer = Featurizer()

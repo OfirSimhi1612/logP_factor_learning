@@ -9,9 +9,11 @@ dependencies:
   - rdkit
   - requests
   - scikit-learn
+  - scipy
   - tqdm
   - seaborn
   - ipympl
+  - notebook
   - pip
 
 

@@ -1,3 +1,4 @@
+# Ofir Simhi, ID: 315908863
 """
 Atom featurizer for molecular graphs.
 Extracts features from RDKit molecules for use in message passing.
@@ -47,7 +48,19 @@ class Featurizer:
         )
 
     def one_hot(self, value, vocab):
-        """Create one-hot encoding"""
+        """
+        Create a one-hot encoding vector for a given value.
+
+        If the value is not found in the vocabulary, the last position
+        is set to 1 (used as an 'unknown' category).
+
+        Args:
+            value: The value to encode (e.g., atom symbol, degree integer)
+            vocab: List of known values defining the encoding positions
+
+        Returns:
+            vec: numpy array of length len(vocab) with a single 1.0 entry
+        """
         vec = np.zeros(len(vocab))
         if value in vocab:
             vec[vocab.index(value)] = 1
@@ -201,8 +214,7 @@ class Featurizer:
             bond_tensor: numpy array of shape (num_atoms, num_atoms, bond_feature_dim)
         """
         num_atoms = mol.GetNumAtoms()
-        # Get feature dimension from a dummy bond or hardcoded
-        # We know it's 10 from featurize_bond
+        # Bond feature dimension: 4 bond type + 1 conjugated + 1 in-ring + 4 stereo = 10
         bond_dim = 10
 
         bond_tensor = np.zeros((num_atoms, num_atoms, bond_dim), dtype=np.float32)

@@ -1,5 +1,10 @@
+# Ofir Simhi, ID: 315908863
 """
 Data loading and preprocessing for the Contextual Atom Scalar MLP.
+
+Downloads the OPERA lipophilicity dataset (hosted by DeepChem), processes
+molecules through featurization and message passing, and creates
+train/validation/test splits with caching for efficiency.
 """
 
 import io
@@ -71,15 +76,19 @@ def get_features_and_targets(df, use_cache=True):
             cache_data["mol_data"],
         )
 
-    # Check your column name! It might be 'smiles' or 'Original_SMILES'
+    # Clean SMILES: some dataset entries contain pipe-separated notation (e.g.,
+    # "CC|extended_info"). We keep only the canonical SMILES before the pipe.
     df["smiles"] = df["smiles"].astype(str).str.split("|").str[0]
 
-    # 2. Verify the pipes are gone (should print Empty DataFrame)
+    # Verify pipe cleanup (should print Empty DataFrame)
     print("Rows with pipes:", df[df["smiles"].str.contains("\|")])
 
+    # X_atom_fps: contextualized atom embeddings from message passing
+    # (named "fps" historically for fingerprints; these are MP embeddings)
     X_atom_fps = []
     y_atom_target = []
     atom_rdkit_score = []
+    # mol_indexs: maps each atom row to its parent molecule index
     mol_indexs = []
     mol_data = []
 
@@ -87,6 +96,7 @@ def get_features_and_targets(df, use_cache=True):
     cmpnn = MessagePassingGraph(depth=3)
     featurizer = Featurizer()
 
+    # --- Process each molecule: featurize, run message passing, extract embeddings ---
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing molecules"):
         smiles_str = row["smiles"]
         if "|" in smiles_str:
@@ -94,8 +104,12 @@ def get_features_and_targets(df, use_cache=True):
 
         mol = Chem.MolFromSmiles(smiles_str)
         if mol is None:
-            continue
+            continue  # Skip molecules RDKit cannot parse
 
+        # Crippen._GetAtomContribs is a private RDKit API that returns per-atom
+        # Wildman-Crippen logP and MR contributions. We use it because the public
+        # Crippen.MolLogP() only returns the molecule-level sum.
+        # Each entry is (logP_contrib, MR_contrib); we take only logP [0].
         atom_contribs = np.array([x[0] for x in Crippen._GetAtomContribs(mol)])
         rdkit_logp = atom_contribs.sum()
 
@@ -116,13 +130,17 @@ def get_features_and_targets(df, use_cache=True):
 
         atom_feats, bond_feats, adj = featurizer.featurize_molecule(mol)
 
+        # Convert to tensors for message passing
         atom_feats_t = torch.from_numpy(atom_feats)
         bond_feats_t = torch.from_numpy(bond_feats)
         adj_t = torch.from_numpy(adj)
 
+        # Run message passing to produce contextualized atom embeddings
+        # that encode each atom's local chemical environment (up to depth=3 bonds)
         atom_embeddings = cmpnn(adj_t, atom_feats_t, bond_feats_t, return_atoms=True)
         atom_embeddings = atom_embeddings.detach().numpy()
 
+        # Flatten per-atom data into global arrays indexed by mol_counter
         for atom_idx in range(num_atoms):
             env_fp = atom_embeddings[atom_idx]
             X_atom_fps.append(env_fp)
@@ -154,7 +172,24 @@ def get_features_and_targets(df, use_cache=True):
 
 
 def create_and_save_splits(mol_indexs, mol_data):
-    """Create and save train/validation/test splits."""
+    """
+    Create stratified train/validation/test splits and save them as CSVs.
+
+    Splits molecule indices into ~72% train, ~8% validation, ~20% test
+    using scikit-learn's train_test_split with a fixed random seed (42)
+    for reproducibility. Saves each split's molecule info to CSV files
+    in the data/splits/ directory.
+
+    Args:
+        mol_indexs: numpy array mapping each atom to its molecule index
+        mol_data: list of dicts, one per molecule, containing metadata
+                  (smiles, exp_logp, rdkit_logp, mw, num_atoms, etc.)
+
+    Returns:
+        train_mol_indexs: numpy array of training molecule indices
+        val_mol_indexs: numpy array of validation molecule indices
+        test_mol_indexs: numpy array of test molecule indices
+    """
     SPLITS_DIR.mkdir(exist_ok=True, parents=True)
 
     unique_mol_indexs = np.unique(mol_indexs)
@@ -167,6 +202,13 @@ def create_and_save_splits(mol_indexs, mol_data):
 
     # Save splits to CSV
     def save_split_csv(indices, filename):
+        """
+        Save molecule metadata for a set of indices to a CSV file.
+
+        Args:
+            indices: numpy array of molecule indices to include
+            filename: Path object for the output CSV file
+        """
         split_data = []
         for idx in indices:
             mol_info = mol_data[idx]

@@ -1,3 +1,4 @@
+# Ofir Simhi, ID: 315908863
 """
 Visualization utilities for per-atom scalar weights and molecular property prediction.
 
@@ -19,7 +20,22 @@ from src.mp_graph.mp_graph import MessagePassingGraph
 
 # Helper to crop white margins from RDKit PNGs
 def _crop_white_margins(pil_img, threshold=245):
-    """Crop near-white margins from an RDKit-rendered image."""
+    """
+    Crop near-white margins from an RDKit-rendered PNG image.
+
+    Converts the image to grayscale, finds the bounding box of all
+    pixels darker than the threshold, and crops to that region with
+    a small padding of 6 pixels on each side.
+
+    Args:
+        pil_img: PIL Image object (RGB) from RDKit's drawing output
+        threshold: int (0-255), pixels brighter than this are considered
+                   white/margin. Default 245.
+
+    Returns:
+        Cropped PIL Image, or the original image if no non-white pixels
+        are found or the input is None.
+    """
     if pil_img is None:
         return pil_img
     # Convert to grayscale and find bounding box of non-white pixels
@@ -436,6 +452,7 @@ def visualize_molecule_with_weights(
     line_h = 0.045
 
     def header(text):
+        """Render a bold section header in the analysis panel at the current y position."""
         nonlocal y
         ax2.text(
             x0,
@@ -450,6 +467,7 @@ def visualize_molecule_with_weights(
         y -= line_h * 0.9
 
     def line(text, color="black", fs=9, weight=None):
+        """Render a single line of text in the analysis panel and advance y downward."""
         nonlocal y
         ax2.text(
             x0,
